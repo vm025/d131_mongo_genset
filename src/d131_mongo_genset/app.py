@@ -30,19 +30,23 @@ USE_DB = False
 
 # --- Radio-button look & feel (size is configurable here) --------------------
 RADIO_FONT_SIZE_PX = 34      # label text size
-RADIO_PADDING_V_PX = 38      # vertical padding  -> overall button height
-RADIO_PADDING_H_PX = 46      # horizontal padding -> overall button width
+RADIO_PADDING_V_PX = 28      # vertical padding  -> overall button height
+RADIO_PADDING_H_PX = 36      # horizontal padding -> overall button width
 
 # --- Explicit button widths (the panel/form width is NOT changed) ------------
 # Previous natural widths were roughly 150px (radio) and 100px (submit);
 # these are ~double. Tune freely.
-RADIO_WIDTH_PX = 800         # width of EACH radio button (ON / OFF)
+RADIO_WIDTH_PX = 300         # width of EACH radio button (ON / OFF)
 SUBMIT_WIDTH_PX = 240        # width of the Submit button
+GAP_RADIO_SUBMIT_PX = 60     # vertical gap between radio buttons and Submit (panel grows)
 APP_MAX_WIDTH_PX = 760       # panel width (unchanged)
 
 # --- Toned colour palette ----------------------------------------------------
-COLOR_PAGE_BG   = "#d5a56e"  # light brownish-orange page (body) background
-COLOR_TITLE     = "#1E90FF"  # bright blue app title
+COLOR_PAGE_BG   = "#eca859"  # light brownish-orange page (body) background
+COLOR_TITLE     = "#052545"  # deep navy app title
+COLOR_BUTTON        = "#2F3E46"  # Submit button background (normal state)
+COLOR_BUTTON_HOVER  = "#4F7C82"  # Submit button background on hover / press
+COLOR_BUTTON_TEXT   = "#FFFFFF"  # Submit button text colour
 COLOR_ON_PAGE   = "#FFF3E6"  # soft cream for plain text sitting on the page
 COLOR_BG        = "#F4F1EC"  # warm off-white (radio cards inside the form)
 COLOR_CARD      = "#FFFFFF"
@@ -139,14 +143,24 @@ def inject_css() -> None:
         /* ---------- Submit button ---------- */
         div[data-testid="stFormSubmitButton"] {{
             display: flex; justify-content: center; width: 100%;
+            padding-top: {GAP_RADIO_SUBMIT_PX}px;  /* gap above the Submit button */
         }}
         div[data-testid="stFormSubmitButton"] button {{
             width: {SUBMIT_WIDTH_PX}px; max-width: 100%; padding: .9rem 0; font-size: 1.15rem; font-weight: 600;
             border-radius: 12px; border: none;
-            background: {COLOR_TEXT}; color: #fff; transition: opacity .2s;
+            background: {COLOR_BUTTON}; color: {COLOR_BUTTON_TEXT};
+            transition: background .2s ease;
         }}
-        div[data-testid="stFormSubmitButton"] button:hover {{
-            opacity: .88; color: #fff;
+        /* hover / keyboard focus / pressed: override Streamlit's white default */
+        div[data-testid="stFormSubmitButton"] button:hover,
+        div[data-testid="stFormSubmitButton"] button:focus,
+        div[data-testid="stFormSubmitButton"] button:focus:not(:active),
+        div[data-testid="stFormSubmitButton"] button:active {{
+            background: {COLOR_BUTTON_HOVER}; color: {COLOR_BUTTON_TEXT};
+            border: none; outline: none; box-shadow: none;
+        }}
+        div[data-testid="stFormSubmitButton"] button p {{
+            color: {COLOR_BUTTON_TEXT};
         }}
 
         /* ---------- Responsive (phones / small tablets) ---------- */
