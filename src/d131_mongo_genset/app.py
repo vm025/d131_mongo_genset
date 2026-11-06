@@ -26,7 +26,7 @@ APP_TITLE = "Genset Operation"
 # --- Feature switch ----------------------------------------------------------
 # True  -> connect to MongoDB, save submissions, show recent activity.
 # False -> never touch the database (UI-only / demo mode).
-USE_DB = False
+USE_DB = True
 
 # --- Radio-button look & feel (size is configurable here) --------------------
 RADIO_FONT_SIZE_PX = 34      # label text size
@@ -278,7 +278,7 @@ def render_history() -> None:
             st.dataframe(
                 rows,
                 hide_index=True,
-                use_container_width=True,
+                width="stretch",
                 column_config={
                     "status": "Status",
                     "timestamp_ist": "Timestamp (IST)",
