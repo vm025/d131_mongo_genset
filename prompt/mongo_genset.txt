@@ -1,0 +1,24 @@
+you are an expert in python & database (especially nosql).
+can you develop an app, using python, streamlit & mongodb (cloud) 
+having the following functionality, as described below?
+
+ the url for the mongodb is:  mongodb+srv://<db_username>:<db_password>@cluster0.hte6gm5.mongodb.net/
+
+ Note:
+* the UI should be attractive & use balanced & toned colours.
+* For each such operation, make the code nicely structured & commented.
+* The db's db_username & password are present in the .streamlit/secrets.toml file, 
+    under the project's root folder .
+* the app should be responsive in design.
+* The UI should a set of two large radio buttons (i.e. the size is configurable), 
+   for on & off functionality (default is "on").
+* the title of the app is "Genset Operation".
+* Once the user makes the selection, the user should be able to submit that radio button's
+ status information.
+ * Once this data reaches the server, the server should store this along with the timestamp (IST).
+
+ Also:
+ a) when the USE_DB variable in the code is false, do not try to connect to the db. 
+ b) make the background colour of the "body" as  light brownish orange (#be6400). 
+ c) The app title should be in bright blue colour.
+ 
