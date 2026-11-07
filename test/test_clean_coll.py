@@ -1,6 +1,13 @@
 import streamlit as st
 from pymongo import MongoClient
 
+import os
+import threading
+import time
+
+
+
+
 # 1. Retrieve connection string from .streamlit/secrets.toml
 # Your secrets.toml should look like this:
 # [mongo]
@@ -9,6 +16,7 @@ mongo_uri = st.secrets["mongo"]["connection_string"]
 
 # 2. Establish connection to the MongoDB cluster
 client = MongoClient(mongo_uri)
+print(client , "\n\n")
 
 # 3. Target your specific database and collection
 DB_NAME = "genset_db"
@@ -34,5 +42,32 @@ def clear_operation_logs():
         client.close()
 
 
+## --------  did not work. ----------------------------------------------------
+
+# # Set shutdown duration in seconds (e.g., 5 minutes = 300 seconds)
+# SHUTDOWN_DELAY = 40
+
+
+# def auto_shutdown():
+#   time.sleep(SHUTDOWN_DELAY)
+#   os._exit(0)
+
+
+# # Ensure the timer thread only starts once per session
+# if "shutdown_started" not in st.session_state:
+#   st.session_state["shutdown_started"] = True
+#   threading.Thread(target=auto_shutdown, daemon=True).start() # starts the shutdown.
+
+# # st.title("Auto-Shutdown Streamlit App")
+# st.write(
+#     f"This application will automatically shut down after"
+#     f" {SHUTDOWN_DELAY // 60} minutes of running."
+# )
+
+## ----------------------------------------------
+
 if __name__ == "__main__":
     clear_operation_logs()
+
+
+

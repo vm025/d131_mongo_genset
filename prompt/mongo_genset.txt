@@ -1,24 +1,100 @@
+============  record genset usage data ===================
+
 you are an expert in python & database (especially nosql).
 can you develop an app, using python, streamlit & mongodb (cloud) 
-having the following functionality, as described below?
+having the following functionality, as described below:
 
  the url for the mongodb is:  mongodb+srv://<db_username>:<db_password>@cluster0.hte6gm5.mongodb.net/
 
+* Follow "SOLID" design principles where ever possible.
+* Note that streamlit package version is 1.66.x. So, do not use any deprecated
+code (e.g. use_container_width=True).
+* the python project is created using the "uv" tool.
+
+
  Note:
-* the UI should be attractive & use balanced & toned colours.
-* For each such operation, make the code nicely structured & commented.
-* The db's db_username & password are present in the .streamlit/secrets.toml file, 
+* the UI is attractive & uses balanced & toned colours.
+* For each functionality, make the code nicely structured & commented.
+* The db's  credentials i.e. db_username & password are present in the .streamlit/secrets.toml file, 
     under the project's root folder .
-* the app should be responsive in design.
-* The UI should a set of two large radio buttons (i.e. the size is configurable), 
+* the app is mobile friendly / responsive in design.
+* The UI has a set of two large radio buttons (i.e. the size is configurable), 
    for on & off functionality (default is "on").
+   Above this set, there should be another set of large radio buttons, showing the option to choose 
+   the genset's name: either "ABC" or "DEF". give sufficient vertical spacing between the two 
+   sets of radio buttons (configurable).
+
 * the title of the app is "Genset Operation".
 * Once the user makes the selection, the user should be able to submit that radio button's
  status information.
- * Once this data reaches the server, the server should store this along with the timestamp (IST).
+ * Once this data reaches the server, the server should store this along with the 
+  timestamp (IST).
 
  Also:
- a) when the USE_DB variable in the code is false, do not try to connect to the db. 
- b) make the background colour of the "body" as  light brownish orange (#be6400). 
- c) The app title should be in bright blue colour.
+ a) when the USE_DB variable in the code is false (default value), do not try to connect to the db. 
+ b) make the background colour of the "body" as  light blueish orange (configurable). 
+ c) The app title should be in navy blue colour.
+ d) The db is called "genset_db", having a collection called "ops_logs" (both configurable in code).
+
+The fields in the mongo collection are as follows:
+a) sl. no.
+b) genset name (either "ABC", or "DEF").
+c) status ( and has value of on / off)
+d) timestamp (in IST)
+
+ All buttons need to in dark colours, & the button labels in white colour for easy visibility.
+
+
+
+
+
+ =========== graph / dashboard ==================================================
  
+you are an expert in python & database (especially nosql).
+can you develop an app, using python, streamlit & mongodb (cloud) 
+having the following functionality, as described below:
+
+ the url for the mongodb is:  mongodb+srv://<db_username>:<db_password>@cluster0.hte6gm5.mongodb.net/
+
+* Follow "SOLID" design principles where ever possible.
+* Note that streamlit package version is 1.66.x. So, do not use any deprecated
+code  (e.g. use_container_width=True).
+* the python project is created using the "uv" tool.
+
+ Note:
+* the UI is attractive & uses balanced & toned colours.
+* For each such operation, make the code nicely structured & commented.
+* The db's credentials i.e. db_username & password are present in the .streamlit/secrets.toml file, 
+    under the project's root folder .
+* the app should be mobile friendly / responsive in design.
+* make the background colour of the "body" as  light greenish orange (configurable).
+
+ Also:
+ a) when the USE_DB variable in the code is false (default value), do not try to connect to the db. 
+ b) make the background colour of the "body" as  light greenish orange (configurable). 
+ c) The app title should be in dark golden colour.
+ d) The db is called "genset_db", having a collection called "ops_logs" (both configurable in code).
+
+
+The data stored in that collection consists of the following fields:
+a) sl. no.
+b) genset name (either "ABC", or "DEF")
+c) status ( and has value of on / off)
+d) timestamp (in IST)
+
+during the 24 hours' duration, the genset(s) can get switched on & off several times, & that data gets 
+recorded in this collection. Sometimes the genset can run beyond 12 am & on to the next early morning.
+can you write the code such that, for any particular month, it shows the number of times the genset was on
+on a particular day & also the total duration for which it ran during that day (i.e. the 24 hour duration).
+And, in case it ran beyond 12 am that night, then consider it upto 12 am for that day's accounting, 
+& the remaining period then goes into the next day's account.
+
+The data is fetched from the mongo server. all processing is done by the python code. 
+Also, this processed data needs to be finally used to draw line & bar graphs (as decided by the user, 
+for the desired month). So, it can be put into a pandas dataframe, for ease of handling.
+ The bar graph can be stacked one, to show the individual usage of the two gensets clearly for that 
+ particular day. Similar strategy is needed for the line graph option.
+ Also show the usage figures for that chosen month - individual genset & consolidated one.
+ also, give an option to download the data in csv format.
+ All buttons need to in dark colours, & the button labels in white colour for easy visibility.
+
