@@ -15,6 +15,7 @@ from dashboard.service import UsageService
 st.set_page_config(page_title="Genset Usage", page_icon="⚡", layout="wide")
 
 
+
 # ------------------------------------------------------------------ styling
 def inject_css() -> None:
     st.markdown(f"""
@@ -91,7 +92,7 @@ def render_diagnostics() -> None:
 def main() -> None:
     inject_css()
     st.markdown('<h1 class="app-title">⚡ Genset Usage Dashboard</h1>', unsafe_allow_html=True)
-    mode = "Live DB data" if cfg.USE_DB else "Demo data (USE_DB = False)"
+    mode = "Live data" if cfg.USE_DB else "Demo data (USE_DB = False)"
     st.markdown(f'<div class="app-sub">Source: {mode}</div>', unsafe_allow_html=True)
 
     now = datetime.now()
@@ -117,11 +118,12 @@ def main() -> None:
     render_summary(daily)
 
     st.subheader(f"{metric} per day — {datetime(year, month, 1):%B %Y}")
-    st.plotly_chart(build_chart(daily, kind, metric), width="stretch")
+    # theme=None: use our own explicit colours instead of Streamlit's chart theme
+    st.plotly_chart(build_chart(daily, kind, metric), width="stretch", theme=None)
 
-    st.subheader("Daily details")
     wide = to_wide(daily)
-    st.dataframe(wide, width="stretch", hide_index=True)
+    with st.expander("📋 Daily details", expanded=False):   # collapsed until the user opens it
+        st.dataframe(wide, width="stretch", hide_index=True)
     st.download_button("⬇ Download CSV", wide.to_csv(index=False).encode("utf-8"),
                        file_name=f"genset_usage_{year}_{month:02d}.csv", mime="text/csv")
 
