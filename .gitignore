@@ -1,4 +1,6 @@
 .streamlit/secrets.toml
+test/data.json
+test/mongo*.bat
 
 
 

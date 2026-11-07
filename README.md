@@ -35,3 +35,6 @@ uv add pandas plotly
  datetimes holding IST clock time.
 --The demo data comes from DemoEventRepository in genset/repository.py. 
    It is used whenever USE_DB = False, and nothing connects to Mongo in that mode.
+
+-- USE_DB & other flags are in config.py file.
+   

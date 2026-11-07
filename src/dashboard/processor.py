@@ -6,6 +6,7 @@ from dashboard import config as cfg
 from dashboard.models import Event, Run
 
 
+
 def month_window(year: int, month: int) -> tuple[datetime, datetime]:
     """[start, end) of a month, as naive IST datetimes."""
     start = datetime(year, month, 1)
@@ -54,7 +55,9 @@ def runs_to_daily(runs: list[Run], start: datetime, end: datetime) -> pd.DataFra
 
     rows = [
         {"date": pd.Timestamp(d), "genset": g,
-         "switch_ons": starts[(g, d)], "hours": round(seconds[(g, d)] / 3600, 2)}
+         "switch_ons": starts[(g, d)],
+         "hours": round(seconds[(g, d)] / 3600, 4),
+         "minutes": round(seconds[(g, d)] / 60, 2)}
         for d in days for g in cfg.GENSETS
     ]
     return pd.DataFrame(rows)
@@ -62,13 +65,15 @@ def runs_to_daily(runs: list[Run], start: datetime, end: datetime) -> pd.DataFra
 
 def to_wide(daily: pd.DataFrame) -> pd.DataFrame:
     """One row per day: per-genset and combined figures (used for table & CSV)."""
-    wide = daily.pivot(index="date", columns="genset", values=["switch_ons", "hours"])
+    wide = daily.pivot(index="date", columns="genset", values=["switch_ons", "hours", "minutes"])
     out = pd.DataFrame(index=wide.index)
     for g in cfg.GENSETS:
         out[f"{g} switch-ons"] = wide[("switch_ons", g)].astype(int)
         out[f"{g} hours"] = wide[("hours", g)]
+        out[f"{g} minutes"] = wide[("minutes", g)]
     out["Total switch-ons"] = wide["switch_ons"].sum(axis=1).astype(int)
-    out["Total hours"] = wide["hours"].sum(axis=1).round(2)
+    out["Total hours"] = wide["hours"].sum(axis=1).round(4)
+    out["Total minutes"] = wide["minutes"].sum(axis=1).round(2)
     out.index = out.index.strftime("%Y-%m-%d")
     out.index.name = "Date"
     return out.reset_index()
@@ -80,10 +85,16 @@ def summarise(daily: pd.DataFrame) -> pd.DataFrame:
         total_hours=("hours", "sum"), switch_ons=("switch_ons", "sum"))
     per.loc["Combined"] = per.sum()
     per["avg_hours_per_day"] = per["total_hours"] / daily["date"].nunique()
-    return per.round(2)
+    return per.round(4)
 
 
 def fmt_hours(hours: float) -> str:
-    """12.5 -> '12h 30m'."""
-    total_min = int(round(hours * 60))
-    return f"{total_min // 60}h {total_min % 60:02d}m"
+    """Readable duration: 0.015 -> '54s', 0.5 -> '30m 00s', 12.5 -> '12h 30m'."""
+    secs = int(round(hours * 3600))
+    h, rem = divmod(secs, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}h {m:02d}m"
+    if m:
+        return f"{m}m {s:02d}s"
+    return f"{s}s"

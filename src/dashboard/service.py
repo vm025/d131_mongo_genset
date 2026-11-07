@@ -8,7 +8,7 @@ from dashboard import config as cfg
 from dashboard.processor import build_runs, month_window, runs_to_daily
 from dashboard.repository import EventRepository
 
-
+  
 class UsageService:
     def __init__(self, repository: EventRepository):
         self._repo = repository

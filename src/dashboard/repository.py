@@ -19,6 +19,8 @@ IST = ZoneInfo(cfg.TIMEZONE)
 _IST_OFFSET = timedelta(hours=5, minutes=30)
 
 
+
+
 class EventRepository(ABC):
     @abstractmethod
     def fetch_events(self, start: datetime, end: datetime) -> list[Event]:
@@ -36,11 +38,19 @@ class MongoEventRepository(EventRepository):
 
     # --- timezone helpers -------------------------------------------------
     @staticmethod
-    def _to_db(ist_naive: datetime) -> datetime:
+    def _to_db(ist_naive: datetime):
+        """Query bound in the format stored in the DB."""
+        if cfg.TIMESTAMP_IS_STRING:
+            # ISO strings sort lexicographically, so a string range query works
+            # (assumes the stored strings carry IST, e.g. "...+05:30").
+            return ist_naive.strftime("%Y-%m-%dT%H:%M:%S")
         return ist_naive if cfg.STORED_AS_IST_WALL_CLOCK else ist_naive - _IST_OFFSET
 
     @staticmethod
-    def _from_db(value: datetime) -> datetime:
+    def _from_db(value) -> datetime:
+        """Stored value (datetime or ISO string) -> naive IST datetime."""
+        if isinstance(value, str):
+            value = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
         if value.tzinfo is not None:                       # tz-aware -> IST
             return value.astimezone(IST).replace(tzinfo=None)
         return value if cfg.STORED_AS_IST_WALL_CLOCK else value + _IST_OFFSET
@@ -51,7 +61,10 @@ class MongoEventRepository(EventRepository):
         ts = doc.get(cfg.FIELD_TIMESTAMP)
         if status not in ("on", "off") or genset not in cfg.GENSETS or ts is None:
             return None                                    # ignore malformed rows
-        return Event(genset, status == "on", self._from_db(ts))
+        try:
+            return Event(genset, status == "on", self._from_db(ts))
+        except (ValueError, TypeError):
+            return None                                    # unparsable timestamp
 
     # --- public API -------------------------------------------------------
     def fetch_events(self, start: datetime, end: datetime) -> list[Event]:
@@ -66,6 +79,21 @@ class MongoEventRepository(EventRepository):
             docs += [d for d in (prev, nxt) if d]
         events = (self._to_event(d) for d in docs)
         return sorted((ev for ev in events if ev), key=lambda ev: ev.timestamp)
+
+
+    def diagnose(self) -> dict:
+        """Quick health-check of the collection (shown in the UI's diagnostics panel)."""
+        sample = self._coll.find_one()
+        expected = [cfg.FIELD_GENSET, cfg.FIELD_STATUS, cfg.FIELD_TIMESTAMP]
+        return {
+            "database": cfg.DB_NAME,
+            "collection": cfg.COLLECTION_NAME,
+            "total_documents": self._coll.count_documents({}),
+            "fields_in_sample": list(sample) if sample else [],
+            "missing_expected_fields": [f for f in expected if not sample or f not in sample],
+            "timestamp_type_in_sample": type(sample.get(cfg.FIELD_TIMESTAMP)).__name__ if sample else None,
+            "sample_document": {k: str(v) for k, v in sample.items()} if sample else None,
+        }
 
 
 # --------------------------------------------------------------- Demo data

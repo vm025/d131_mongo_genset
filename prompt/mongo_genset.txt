@@ -99,4 +99,5 @@ for the desired month). So, it can be put into a pandas dataframe, for ease of h
  Also show the usage figures for that chosen month - individual genset & consolidated one.
  also, give an option to download the data in csv format.
  All buttons need to in dark colours, & the button labels in white colour for easy visibility.
-
+The genset running duration typically would vary from 30 seconds to 40 min. so, the
+graph axes needs to adjust accordingly.

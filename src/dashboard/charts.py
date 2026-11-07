@@ -4,11 +4,24 @@ import plotly.graph_objects as go
 
 from dashboard import config as cfg
 
-METRICS = {"Running hours": ("hours", "Hours"), "Switch-ons": ("switch_ons", "Times switched on")}
+AUTO = "Running time (auto unit)"
+AUTO_SWITCH_HOURS = 2    # peak stacked daily total below this -> show minutes
+
+METRICS = {AUTO: (None, None), "Running hours": ("hours", "Hours"), "Running minutes": ("minutes", "Minutes"), "Switch-ons": ("switch_ons", "Times switched on")}
+
+
+def resolve_metric(daily: pd.DataFrame, metric_label: str) -> tuple[str, str]:
+    """(column, axis title). 'Auto' picks minutes for light months, hours otherwise."""
+    if metric_label == AUTO:
+        peak_hours = daily.groupby("date")["hours"].sum().max()
+        return ("minutes", "Minutes") if peak_hours < AUTO_SWITCH_HOURS else ("hours", "Hours")
+    return METRICS[metric_label]
 
 
 def build_chart(daily: pd.DataFrame, kind: str, metric_label: str) -> go.Figure:
-    column, y_title = METRICS[metric_label]
+    if "minutes" not in daily.columns:          # tolerate an older processor.py
+        daily = daily.assign(minutes=daily["hours"] * 60)
+    column, y_title = resolve_metric(daily, metric_label)
     fig = go.Figure()
     for genset in cfg.GENSETS:
         d = daily[daily["genset"] == genset]
@@ -27,4 +40,5 @@ def build_chart(daily: pd.DataFrame, kind: str, metric_label: str) -> go.Figure:
         hovermode="x unified",
     )
     fig.update_xaxes(tickformat="%d", dtick=86400000 * 2)
+    fig.update_yaxes(rangemode="tozero")   # axis range then adapts to the data
     return fig

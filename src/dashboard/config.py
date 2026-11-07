@@ -1,7 +1,7 @@
 """Central, easily-editable configuration (single place to tweak behaviour)."""
 
 # ---- Database -------------------------------------------------------------
-USE_DB = False                      # False -> no DB connection; demo data is used
+USE_DB = True                      # False -> no DB connection; demo data is used
 MONGO_HOST = "cluster0.hte6gm5.mongodb.net"
 DB_NAME = "genset_db"
 COLLECTION_NAME = "ops_logs"
@@ -15,6 +15,10 @@ FIELD_TIMESTAMP = "timestamp"
 # True  -> timestamps are stored as naive datetimes holding IST wall-clock time
 # False -> timestamps are stored the usual Mongo way (UTC) and converted to IST
 STORED_AS_IST_WALL_CLOCK = True
+
+# True  -> timestamps are ISO-8601 strings, e.g. "2026-11-07T18:48:28+05:30"
+# False -> timestamps are real BSON datetimes
+TIMESTAMP_IS_STRING = True
 
 GENSETS = ("ABC", "DEF")
 TIMEZONE = "Asia/Kolkata"

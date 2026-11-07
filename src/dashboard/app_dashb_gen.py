@@ -1,6 +1,7 @@
 """Streamlit UI. Run with:  uv run streamlit run app.py"""
 from datetime import datetime
-
+import json
+import pandas as pd
 import streamlit as st
 
 from dashboard import config as cfg
@@ -9,6 +10,7 @@ from  dashboard.processor import fmt_hours, summarise, to_wide
 from dashboard.repository import (DemoEventRepository, EventRepository,
                                MongoEventRepository, build_mongo_client)
 from dashboard.service import UsageService
+
 
 st.set_page_config(page_title="Genset Usage", page_icon="⚡", layout="wide")
 
@@ -31,6 +33,11 @@ def inject_css() -> None:
           background-color: #1d332b; color: {cfg.BUTTON_FG}; }}
       div[data-testid="stMetric"] {{ background: {cfg.CARD_BG}; border-radius: 10px;
           padding: 0.6rem 0.9rem; border: 1px solid #d9d6a8; }}
+      /* expanders (e.g. diagnostics panel): white background, dark text */
+      div[data-testid="stExpander"] details {{ background-color: #FFFFFF;
+          border: 1px solid #d9d6a8; border-radius: 10px; }}
+      div[data-testid="stExpander"] summary,
+      div[data-testid="stExpander"] summary p {{ color: #2B2B2B; }}
       .block-container {{ padding-top: 2rem; }}
     </style>""", unsafe_allow_html=True)
 
@@ -49,7 +56,8 @@ def get_repository() -> EventRepository:
 
 
 @st.cache_data(ttl=300, show_spinner="Fetching & processing data…")
-def load_daily(year: int, month: int):
+def load_daily(year: int, month: int, use_db: bool):
+    # `use_db` is part of the cache key, so switching modes never serves stale data
     return UsageService(get_repository()).daily_usage(year, month)
 
 
@@ -62,14 +70,28 @@ def render_summary(daily) -> None:
         row = summary.loc[name]
         col.metric(f"{name}" if name != "Combined" else "Combined (all gensets)",
                    fmt_hours(row["total_hours"]),
-                   f"{int(row['switch_ons'])} switch-ons · avg {row['avg_hours_per_day']:.1f} h/day",
+                   f"{int(row['switch_ons'])} switch-ons · avg {fmt_hours(row['avg_hours_per_day'])}/day",
                    delta_color="off")
+
+
+def render_diagnostics() -> None:
+    """Collection health-check (only when USE_DB is True)."""
+    with st.expander("🔧 Database diagnostics"):
+        try:
+            info = get_repository().diagnose()
+            sample = info.pop("sample_document")
+            st.table(pd.DataFrame({"Item": list(info),
+                                   "Value": [str(v) for v in info.values()]}).set_index("Item"))
+            st.caption("Sample document")
+            st.code(json.dumps(sample, indent=2), language="json")
+        except Exception as exc:
+            st.error(f"Diagnostics failed: {exc}")
 
 
 def main() -> None:
     inject_css()
     st.markdown('<h1 class="app-title">⚡ Genset Usage Dashboard</h1>', unsafe_allow_html=True)
-    mode = "Live MongoDB data" if cfg.USE_DB else "Demo data (USE_DB = False)"
+    mode = "Live DB data" if cfg.USE_DB else "Demo data (USE_DB = False)"
     st.markdown(f'<div class="app-sub">Source: {mode}</div>', unsafe_allow_html=True)
 
     now = datetime.now()
@@ -84,11 +106,14 @@ def main() -> None:
         load_daily.clear()
 
     try:
-        daily = load_daily(year, month)
+        daily = load_daily(year, month, cfg.USE_DB)
     except Exception as exc:            # network / auth / schema problems
         st.error(f"Could not load data: {exc}")
         return
 
+    if cfg.USE_DB and daily["hours"].sum() == 0:
+        st.warning("No running time found for this month. Check the diagnostics panel "
+                   "below (field names, timestamp type, genset names, status values).")
     render_summary(daily)
 
     st.subheader(f"{metric} per day — {datetime(year, month, 1):%B %Y}")
@@ -99,6 +124,9 @@ def main() -> None:
     st.dataframe(wide, width="stretch", hide_index=True)
     st.download_button("⬇ Download CSV", wide.to_csv(index=False).encode("utf-8"),
                        file_name=f"genset_usage_{year}_{month:02d}.csv", mime="text/csv")
+
+    if cfg.USE_DB:
+        render_diagnostics()
 
 
 main()
