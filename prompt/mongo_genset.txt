@@ -44,6 +44,12 @@ d) timestamp (in IST)
 
  All buttons need to in dark colours, & the button labels in white colour for easy visibility.
 
+To this app, add a login page at the start. The user needs to enter a 6+ digits (numeric) passcode.
+The passcode is stored in the .streamlit/secrets.toml file, under "PASSCODE" key.
+If the passcode is correct, only then allow the user to proceed to the data entry page.
+In the hints (i.e. placeholder option) of the text box, show as if its 4 characters only.
+Block the screen for 2 min (configurable in code), of 4 consecutive attempts (configurable in 
+code) fail.
 
 
 
@@ -101,3 +107,5 @@ for the desired month). So, it can be put into a pandas dataframe, for ease of h
  All buttons need to in dark colours, & the button labels in white colour for easy visibility.
 The genset running duration typically would vary from 30 seconds to 40 min. so, the
 graph axes needs to adjust accordingly.
+
+===================================

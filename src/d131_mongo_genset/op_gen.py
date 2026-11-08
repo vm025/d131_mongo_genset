@@ -11,6 +11,7 @@ Layers (each with a single responsibility - the "S" in SOLID):
     3. Clock       - supplies "now" in IST (swappable, e.g. for tests)
     4. Repository  - abstract storage contract + Mongo / no-DB implementations
     5. Service     - the use case: "record an operation"
+       (+ Auth     - passcode check and brute-force lockout, section 5c)
     6. UI          - theme (CSS), widgets, and the page itself
 
 Dependencies point inwards: the UI knows the service, the service knows the
@@ -23,6 +24,10 @@ Run with:   streamlit run app.py
 
 from __future__ import annotations
 
+import hmac
+import math
+import threading
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta, timezone
@@ -41,7 +46,7 @@ import streamlit as st
 # False (default): the app never touches the database; submissions are only
 #                  acknowledged on screen.
 # True           : records are written to MongoDB.
-USE_DB: bool = True
+USE_DB: bool = False
 
 
 @dataclass(frozen=True)
@@ -54,13 +59,19 @@ class Config:
 
     # --- Database ---------------------------------------------------------
     mongo_host: str = "cluster0.hte6gm5.mongodb.net"
-    db_name: str = "genset_db"
+    db_name: str = "genset"
     collection_name: str = "ops_logs"
     counters_collection_name: str = "counters"  # used for the auto "sl_no"
     server_selection_timeout_ms: int = 5000
 
     # --- Domain -----------------------------------------------------------
     recent_rows_to_show: int = 10
+
+    # --- Login ------------------------------------------------------------
+    passcode_max_length: int = 20       # input box limit
+    passcode_hint: str = "••••"         # placeholder - looks like a 4-character code
+    max_failed_attempts: int = 4        # consecutive wrong passcodes before the lock
+    lockout_seconds: int = 120          # how long the screen stays blocked (2 min)
 
     # --- Colours (balanced, toned) ---------------------------------------
     body_bg: str = "#F1E3D8"            # light blueish-orange (soft peach with a cool undertone)
@@ -271,6 +282,132 @@ def build_service(cfg: Config, use_db: bool) -> OpsLogService:
 
 
 # =============================================================================
+# 5c. AUTHENTICATION  (passcode check + brute-force lockout)
+# =============================================================================
+
+AUTH_SESSION_KEY = "authenticated"
+
+
+class PasscodeVerifier(ABC):
+    """Decides whether a passcode is correct (swap for hashing, an API, etc.)."""
+
+    @abstractmethod
+    def verify(self, candidate: str) -> bool:
+        """True if the candidate matches the real passcode."""
+
+
+class SecretsPasscodeVerifier(PasscodeVerifier):
+    """Compares against the PASSCODE key in .streamlit/secrets.toml."""
+
+    def verify(self, candidate: str) -> bool:
+        expected = str(st.secrets["PASSCODE"]).strip()
+        # Constant-time comparison: does not leak how many leading digits matched.
+        return hmac.compare_digest(candidate.encode(), expected.encode())
+
+
+class LockoutTracker:
+    """Counts consecutive failures and blocks logins for a while.
+
+    One tracker is shared by the whole server process (see get_lockout_tracker),
+    so opening a new tab / refreshing the browser does NOT reset the lock.
+    Thread-safe, because Streamlit serves each session on its own thread.
+    """
+
+    def __init__(self, max_attempts: int, lockout_seconds: int, time_fn=time.monotonic) -> None:
+        self._max = max_attempts
+        self._lockout = lockout_seconds
+        self._now = time_fn
+        self._lock = threading.Lock()
+        self._failures = 0
+        self._locked_until = 0.0  # 0 = not locked
+
+    def _expire_if_needed(self) -> None:
+        """Caller must hold the lock. Clears an elapsed lock and the counter."""
+        if self._locked_until and self._now() >= self._locked_until:
+            self._locked_until = 0.0
+            self._failures = 0
+
+    def seconds_remaining(self) -> int:
+        """Seconds left on the lock (0 if not locked)."""
+        with self._lock:
+            self._expire_if_needed()
+            if not self._locked_until:
+                return 0
+            return max(1, math.ceil(self._locked_until - self._now()))
+
+    def record_failure(self) -> int:
+        """Register a wrong passcode. Returns attempts left (0 = now locked)."""
+        with self._lock:
+            self._expire_if_needed()
+            if self._locked_until:
+                return 0
+            self._failures += 1
+            left = max(0, self._max - self._failures)
+            if left == 0:
+                self._locked_until = self._now() + self._lockout
+            return left
+
+    def record_success(self) -> None:
+        """A correct passcode resets the counter."""
+        with self._lock:
+            self._failures = 0
+            self._locked_until = 0.0
+
+
+class LoginOutcome(Enum):
+    SUCCESS = "success"
+    WRONG = "wrong"
+    LOCKED = "locked"
+
+
+@dataclass(frozen=True)
+class LoginResult:
+    outcome: LoginOutcome
+    attempts_left: int = 0
+
+
+class AuthService:
+    """Login use case. Depends on abstractions (verifier) + the lockout policy."""
+
+    def __init__(self, verifier: PasscodeVerifier, tracker: LockoutTracker) -> None:
+        self._verifier = verifier
+        self._tracker = tracker
+
+    def lock_seconds_remaining(self) -> int:
+        return self._tracker.seconds_remaining()
+
+    def attempt(self, code: str) -> LoginResult:
+        if self._tracker.seconds_remaining() > 0:
+            return LoginResult(LoginOutcome.LOCKED)
+        if self._verifier.verify(code):
+            self._tracker.record_success()
+            return LoginResult(LoginOutcome.SUCCESS)
+        left = self._tracker.record_failure()
+        if left == 0:
+            return LoginResult(LoginOutcome.LOCKED)
+        return LoginResult(LoginOutcome.WRONG, attempts_left=left)
+
+
+def passcode_is_configured() -> bool:
+    """True if PASSCODE exists in .streamlit/secrets.toml."""
+    try:
+        return "PASSCODE" in st.secrets
+    except Exception:  # no secrets file at all
+        return False
+
+
+@st.cache_resource
+def get_lockout_tracker(cfg: Config) -> LockoutTracker:
+    """One tracker per server process (shared by all sessions)."""
+    return LockoutTracker(cfg.max_failed_attempts, cfg.lockout_seconds)
+
+
+def build_auth_service(cfg: Config) -> AuthService:
+    """Composition root for authentication."""
+    return AuthService(SecretsPasscodeVerifier(), get_lockout_tracker(cfg))
+
+
+# =============================================================================
 # 6. UI
 # =============================================================================
 
@@ -360,6 +497,21 @@ html, body, .stApp, [data-testid="stAppViewContainer"] { background: $bg !import
     color: $label !important; font-size: $submit_fs; font-weight: 700;
 }
 
+/* ---------- Login ---------- */
+.st-key-login_group input {
+    text-align: center; font-size: 1.8rem; font-weight: 700; color: $title;
+    letter-spacing: 0.5em; min-height: 3.6rem;
+}
+.st-key-login_group input::placeholder { color: rgba(51, 65, 92, 0.45); letter-spacing: 0.5em; }
+.lock-box {
+    text-align: center; color: $text; background: $card_bg;
+    border: 1px solid $card_border; border-radius: 22px; padding: 2rem 1rem;
+}
+.lock-box .lock-title { font-size: 1.25rem; font-weight: 700; color: $title; }
+.lock-box .lock-time {
+    font-size: clamp(2.6rem, 11vw, 3.6rem); font-weight: 800; color: $title; margin: 0.6rem 0;
+}
+
 /* ---------- Small screens ---------- */
 @media (max-width: 480px) {
     .block-container { padding: 1.2rem 0.6rem 2rem; }
@@ -418,7 +570,52 @@ def render_recent(service: OpsLogService, cfg: Config) -> None:
             st.caption("No entries yet.")
 
 
-# ---- 6c. Page ---------------------------------------------------------------
+# ---- 6c. Login screens ------------------------------------------------------
+
+
+@st.fragment(run_every="1s")
+def locked_countdown(auth: AuthService) -> None:
+    """Blocked screen with a live countdown; returns to the login form when done."""
+    remaining = auth.lock_seconds_remaining()
+    if remaining <= 0:
+        st.rerun()  # lock expired -> show the login form again
+    mins, secs = divmod(remaining, 60)
+    st.markdown(
+        f"""<div class="lock-box">
+              <div class="lock-title">🔒 Too many failed attempts</div>
+              <div class="lock-time">{mins:02d}:{secs:02d}</div>
+              <div>Please wait before trying again.</div>
+            </div>""",
+        unsafe_allow_html=True,
+    )
+
+
+def render_login(auth: AuthService, cfg: Config) -> None:
+    """Passcode form. On success the session is marked as authenticated."""
+    with st.form("login_form", border=True):
+        st.markdown('<div class="section-label">Enter passcode</div>', unsafe_allow_html=True)
+        with st.container(key="login_group"):
+            code = st.text_input(
+                "Passcode", type="password", placeholder=cfg.passcode_hint,
+                max_chars=cfg.passcode_max_length, label_visibility="collapsed",
+            )
+        vertical_space(1.0)
+        submitted = st.form_submit_button("Login", width="stretch")
+
+    if not submitted:
+        return
+
+    result = auth.attempt(code.strip())
+    if result.outcome is LoginOutcome.SUCCESS:
+        st.session_state[AUTH_SESSION_KEY] = True
+        st.rerun()
+    elif result.outcome is LoginOutcome.LOCKED:
+        st.rerun()  # next run shows the blocked screen
+    else:
+        st.error("Wrong password")
+
+
+# ---- 6d. Page ---------------------------------------------------------------
 
 
 def main() -> None:
@@ -428,6 +625,18 @@ def main() -> None:
     )
     inject_theme(CFG)
     st.markdown(f'<h1 class="app-title">{CFG.app_title}</h1>', unsafe_allow_html=True)
+
+    # ---- Login gate: nothing below (incl. the DB connection) runs until authenticated.
+    if not passcode_is_configured():
+        st.error("PASSCODE is missing in .streamlit/secrets.toml.")
+        st.stop()
+    auth = build_auth_service(CFG)
+    if not st.session_state.get(AUTH_SESSION_KEY, False):
+        if auth.lock_seconds_remaining() > 0:
+            locked_countdown(auth)
+        else:
+            render_login(auth, CFG)
+        st.stop()
 
     # Build the service (connects to MongoDB only if USE_DB is True).
     try:
@@ -464,6 +673,11 @@ def main() -> None:
 
     if USE_DB:
         render_recent(service, CFG)
+
+    vertical_space(1.0)
+    if st.button("Log out", width="stretch"):
+        st.session_state[AUTH_SESSION_KEY] = False
+        st.rerun()
 
 
 if __name__ == "__main__":
